@@ -32,13 +32,13 @@ from PIL import Image
 from sklearn.model_selection import train_test_split
 
 
-# ── Configuration ────────────────────────────────────────────────────────────
+# ── Config ────────────────────────────────────────────────────────────
 
-MIN_IMAGE_SIZE = 500          # minimum width AND height in pixels
+MIN_IMAGE_SIZE = 300          # minimum width AND height in pixels
 BLUR_THRESHOLD = 80.0         # Laplacian variance below this = blurry
 TRAIN_RATIO    = 0.70
 VAL_RATIO      = 0.15
-TEST_RATIO     = 0.15         # must sum to 1.0
+TEST_RATIO     = 0.15         
 RANDOM_SEED    = 42
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"}
 
@@ -127,7 +127,7 @@ def assign_splits(portion_ids: list[str], food_types: list[str]) -> dict[str, st
     )
 
     # Split the temp set into val and test
-    relative_test = TEST_RATIO / val_test_ratio
+    relative_test = 0.5
     val_ids, test_ids = train_test_split(
         temp_ids,
         test_size=relative_test,
