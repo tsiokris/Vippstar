@@ -244,9 +244,11 @@ def run(dataset_dir: Path) -> None:
 
         if old_path == new_path:
             continue
+
         if new_path.exists():
             rename_errors.append(f"  Target already exists: {new_path}")
             continue
+        
         try:
             old_path.rename(new_path)
         except Exception as e:
@@ -319,7 +321,7 @@ def run(dataset_dir: Path) -> None:
         report_path = annot_dir / "validation_issues.csv"
         pd.DataFrame(validation_issues).to_csv(report_path, index=False)
         print(f"  [WARNING] {len(validation_issues)} image(s) have issues.")
-        print(f"  Full report saved → {report_path}")
+        print(f"  Full report saved at {report_path}")
     else:
         print(f"  All {total_images} images passed validation.")
 
@@ -342,13 +344,6 @@ def run(dataset_dir: Path) -> None:
     print("  Portions per food type:")
     for ft, count in df.groupby("food_type")["portion_id"].count().items():
         print(f"    {ft:<30} {count}")
-
-    print()
-    print("  Weight statistics (grams):")
-    print(f"    Min    : {df['weight_g'].min():.1f} g")
-    print(f"    Max    : {df['weight_g'].max():.1f} g")
-    print(f"    Mean   : {df['weight_g'].mean():.1f} g")
-    print(f"    Median : {df['weight_g'].median():.1f} g")
 
     print(f"\n{'='*60}")
     print("  Phase 1 complete.")
