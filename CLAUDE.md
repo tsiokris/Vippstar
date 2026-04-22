@@ -20,34 +20,22 @@ The project serves two purposes:
 
 ---
 
-## Cuisines covered
-
-The food types will be drawn from three cuisines. The final list is **not yet finalized** but will include dishes from:
-
-- **Italian** cuisine
-- **Bosnian** cuisine
-- **Belgian** cuisine
-
-Each cuisine will contribute a fixed set of food classes. The list will be updated in this file once confirmed with the research team.
-
----
-
 ## Dataset
 
 ### Structure on disk
 
 Original structure from pilots (what you received):
 ```
-dataset/raw/
+data/raw/
 ├── <food_type>/          # e.g. "lasagne", "burek"
 │   ├── 100g/             # folder name = weight in grams
 │   ├── 150g/
 │   └── 220g/
-│       ├── img_01.jpg    # 20 images per portion, no special naming
+│       ├── img_01.jpg    # at least 20 images per portion, no special naming
 │       └── ...
 ```
 
-Target structure after running `phase1_setup.py`:
+Target structure:
 ```
 dataset/
 ├── raw/
@@ -56,21 +44,19 @@ dataset/
 │   │   ├── <food_type>_002/
 │   │   └── ...
 ├── annotations/
-│   ├── metadata.csv              # one row per portion
+│   ├── metadata.csv   
 │   └── validation_issues.csv    # flagged images (if any)
 └── nutrition/
-    └── nutrition_per_100g.csv    # provided by nutritionist
+    └── nutrition_per_100g.csv    # provided by nutritionist (ignore nutritions for now)
 ```
-
-> **Note:** The weight is parsed automatically from the original folder name (e.g. `150g` → `weight_g = 150.0`). The script `phase1_setup.py` handles all renaming and CSV generation.
 
 ### Metadata CSV schema (`metadata.csv`)
 
 Each row represents one **portion** (not one image). All 20 images of that portion share the same row.
 
 ```
-portion_id, food_type, weight_g, split
-portion_001, lasagne, 312.4, train
+portion_id, food_type, weight_g, split, path
+pizza_001, pizza, 25, train, data/raw/pizza/25g
 ```
 
 | Column | Type | Description |
@@ -79,17 +65,8 @@ portion_001, lasagne, 312.4, train
 | `food_type` | string | Food class label |
 | `weight_g` | float | Ground truth weight measured on a digital kitchen scale |
 | `split` | string | `train`, `val`, or `test` |
+| `path` | string | Relative path for the portion |
 
-### Nutritional database schema (`nutrition_per_100g.csv`)
-
-Provided by the project nutritionist. Values are per 100g of the food item.
-
-```
-food_type, kcal, protein_g, fat_g, carbs_g
-lasagne, 135.0, 7.2, 5.8, 14.1
-```
-
----
 
 ## Image capture protocol
 
@@ -172,7 +149,6 @@ Weight estimation approach (to be decided — options ranked by simplicity):
 |---|---|---|
 | A | **2D area + fixed depth + density** | Simplest. Assume a typical height per food type. |
 | B | **Monocular depth estimation** | Medium. Use a pretrained depth model (e.g. Depth Anything v2). |
-| C | **Multi-view 3D reconstruction** | Most accurate. Use the 20 images per portion to reconstruct volume. |
 
 > **Recommendation for v1:** Start with Option A. It is transparent, explainable, and easy to debug. Depth and density values per food type can be stored in a simple lookup table alongside the nutritional data.
 
@@ -195,14 +171,6 @@ nutrition = (predicted_weight_g / 100) × nutrition_per_100g
 | Data handling | pandas, Pillow, numpy |
 | Experiment tracking | MLflow or Weights & Biases (TBD) |
 | Notebooks | Jupyter |
-
----
-
-## Compute
-
-- **Primary:** EU-funded research workstation (MedLab / Forth / Precious project) — high-capability GPU server
-- **Secondary:** Local development machine
-- **Optional:** Google Colab for lightweight experiments and sharing
 
 ---
 
@@ -269,17 +237,17 @@ Produce a clean, well-organised dataset that is ready to be loaded by a PyTorch 
 
 **Task 1 — Folder structure**
 
-Ensure all images follow this exact layout:
+Task 1 targets to create/construct the csv file that will contain the metadata. The endgoal of this task is to have a .py file that will take the input dataset and will either produce or update (if it already exists) the csv that contains the information for each food type and portion that will later be used in model training and the data loaders that we will create.
 
 ```
 dataset/
 ├── raw/
 │   ├── <food_type>/              # e.g. "lasagne", "burek"
 │   │   ├── <portion_id>/         # e.g. "lasagne_001"
-│   │   │   ├── top_down.jpg      # the 90° shot — always this exact name
-│   │   │   ├── pos_02.jpg        # remaining position shots
+│   │   │   ├── img1.jpg      
+│   │   │   ├── img2.jpg        
 │   │   │   ├── ...
-│   │   │   ├── tilt_01.jpg       # tilt angle shots
+│   │   │   ├── ...       
 │   │   │   └── ...
 │   │   └── ...
 │   └── ...
@@ -291,20 +259,16 @@ dataset/
 
 Naming rules:
 - `portion_id` format: `<food_type>_<3-digit-number>` e.g. `lasagne_001`
-- The top-down image must always be named `top_down.jpg` — Phase 4 depends on this
 - All filenames lowercase, no spaces, use underscores
 
-**Task 2 — Build metadata.csv**
-
-Run `scripts/build_metadata.py` to auto-generate the CSV skeleton from the folder structure. Then manually fill in `weight_g` from the pilot scale records.
 
 Final schema (one row per portion):
 ```
-portion_id, food_type, weight_g, split
-lasagne_001, lasagne, 312.4, train
+portion_id, food_type, weight_g, split, path
+pizza_001, pizza, 25, train, path/to/portion/dir 
 ```
 
-**Task 3 — Image quality check (QC)**
+**Task 2 — Image quality check (QC)**
 
 Run `scripts/qc_images.py`. It produces `annotations/qc_report.csv` flagging:
 
@@ -345,23 +309,9 @@ Open and run `notebooks/01_data_exploration.ipynb`. It should show:
 
 ---
 
-## Open decisions (to be resolved)
-
-| Decision | Status | Notes |
-|---|---|---|
-| Final food type list | ⏳ Pending | Italian, Bosnian, Belgian — specific dishes TBD |
-| Weight estimation approach | ⏳ Pending | Start with Option A (2D area + density) |
-| Nutritional data | ⏳ Pending | Nutritionist is preparing per-100g values |
-| Annotation tooling | ⏳ Pending | Need to choose tool for mask annotation (e.g. CVAT, Label Studio) |
-| Experiment tracking tool | ⏳ Pending | MLflow vs Weights & Biases |
-| Train/val/test split strategy | ⏳ Pending | Must split by portion, not by image, to avoid leakage |
-
----
-
 ## Important constraints and notes
 
 - **Split by portion, not by image.** All 20 images of a portion must go into the same split. Never let images of the same portion appear in both train and test — this would cause data leakage and artificially inflate accuracy.
-- **Top-down image is primary.** For area estimation, always use the top-down (90°) photo. Angled images are useful for depth cues and data augmentation, but not for area measurement.
 - **One food item per plate** in the current phase. Multi-item plates are a future extension.
 - **Do not commit raw images to git.** Use `.gitignore` and document the data download/access procedure in README.md.
 - **Credit card detection must be validated** before any weight estimate is computed. If the card is not detected, the image should be flagged and skipped.
@@ -372,8 +322,8 @@ Open and run `notebooks/01_data_exploration.ipynb`. It should show:
 
 | Term | Meaning |
 |---|---|
-| Portion | A single plate of food with a known weight, photographed 20 times |
-| Food type | The class label (e.g. "burek", "lasagne") |
+| Portion | A single plate of food with a known weight, photographed at least 20 times |
+| Food type | The class label (e.g. "pizza", "lasagne") |
 | px/mm ratio | Pixels per millimetre — derived from the credit card reference |
 | Mask | A binary image indicating which pixels belong to the food item |
 | Density | Mass per unit volume (g/cm³) — used to convert area × depth → weight |
