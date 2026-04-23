@@ -1,6 +1,8 @@
 import re
 
 
+# ── Functions ────────────────────────────────────────────────────────────
+
 def parse_weight(folder_name: str) -> float | None:
     """
     Extract weight in grams from a folder name like '150g' or '150G'.

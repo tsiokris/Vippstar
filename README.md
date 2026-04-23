@@ -1,10 +1,18 @@
 # Food Weight Estimation
 
-A machine learning project that estimates the **weight in grams** of a food portion from a single smartphone photo, identifies the **food type**, and computes a **nutritional breakdown** (kcal, protein, fat, carbohydrates).
+A machine learning pipeline that estimates the weight in grams of a food portion from a single          
+smartphone photo and computes a nutritional breakdown (kcal, protein, fat, carbohydrates).              
+
+The system uses a credit card placed next to the plate as a fixed-size reference object (85.6 × 54 mm)  
+to derive a pixel-to-millimetre scale, segments the food item, classifies the food type, and estimates
+weight from the real-world area combined with food density values.                                      
+                
+This repository covers Phase 1 — Data Foundation: building a clean, validated dataset ready for model   
+training.
 
 ---
 
-## What it does
+## What the final AI pipeline does
 
 Given a photo of a plate with a credit card placed next to it as a size reference, the system:
 
@@ -15,6 +23,26 @@ Given a photo of a plate with a credit card placed next to it as a size referenc
 5. Computes kcal, protein, fat, and carbohydrates from the predicted weight
 
 ---
+
+## What this Repo does
+
+---
+
+Data Foundation: building a clean, validated dataset ready for model   
+training. (Given a specific Structure)
+
+Files derived from pilots of the study must be in the following structure:
+
+raw/
+├── <food_label>/         # e.g. "lasagne", "burek"
+│   ├── 100g/             # folder name = weight in grams
+│   ├── 150g/
+│   └── 220g/
+│       ├── img_01.jpg    # at least 20 images per portion, no special naming
+│       └── ...
+
+---
+
 
 ## Project status
 
@@ -45,27 +73,16 @@ food-weight-estimation/
 ├── CLAUDE.md                        # full project spec (read this first)
 ├── README.md                        # this file
 ├── .gitignore
-├── dataset/
+├── data/
 │   ├── raw/                         # images — not committed to git
-│   ├── annotations/
-│   │   ├── metadata.csv             # portion_id, food_type, weight_g, split
-│   │   └── validation_issues.csv    # QC failures (auto-generated)
-│   └── nutrition/
-│       └── nutrition_per_100g.csv   # kcal, protein, fat, carbs per 100g
-├── notebooks/
-│   ├── 01_data_exploration.ipynb
-│   ├── 02_classification.ipynb
-│   ├── 03_segmentation.ipynb
-│   └── 04_weight_estimation.ipynb
+│   └── annotations/
+│       ├── metadata.csv             # portion_id, food_type, weight_g, split
+│       └── validation_issues.csv    # QC failures (auto-generated)
 ├── src/
-│   ├── data/
-│   ├── models/
-│   ├── reference/
-│   └── nutrition/
+│   ├── helpers/
+│   └── image_processing/
 ├── scripts/
-│   └── phase1_setup.py              # Phase 1 setup script
-├── configs/
-│   └── default.yaml
+│   └── metadata_builder.py              # Phase 1 setup script
 └── requirements.txt
 ```
 
@@ -77,8 +94,8 @@ food-weight-estimation/
 
 ```bash
 # Clone the repo
-git clone https://github.com/your-username/food-weight-estimation.git
-cd food-weight-estimation
+git clone https://github.com/tsiokris/Vippstar.git
+cd Vippstar
 
 # Create a virtual environment
 python -m venv venv
@@ -95,7 +112,7 @@ pip install -r requirements.txt
 Place your raw images in `dataset/raw/<food_type>/<weight_folder>/` then run:
 
 ```bash
-python scripts/phase1_setup.py --dataset_dir dataset/
+python scripts/metadata_builder.py --dataset_dir data/
 ```
 
 This will rename portion folders to unique IDs, parse weights from folder names, assign train/val/test splits, write `metadata.csv`, and validate all images.
@@ -104,10 +121,7 @@ This will rename portion folders to unique IDs, parse weights from folder names,
 
 ## Tech stack
 
-- **Python 3.10+** with **PyTorch**
-- Segmentation: SAM 2 / YOLOv8-seg
-- Classification: EfficientNet-B0 (torchvision)
-- Reference detection: OpenCV
+- **Python 3.10+**
 - Data: pandas, Pillow, NumPy
 
 ---
