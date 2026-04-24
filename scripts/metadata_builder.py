@@ -11,7 +11,7 @@ What this script does, in order:
 HOW TO RUN
 ----------
 from the project root, run:
-  python scripts/metadata_builder.py --dataset_dir /path/to/your/dataset
+  python  -m scripts.metadata_builder.py --dataset_dir /path/to/your/dataset
 
 REQUIREMENTS
 ------------
@@ -24,7 +24,7 @@ import pandas as pd
 import numpy as np
 import sys
 from pathlib import Path
-from src.utils.helpers import parse_weight
+from src.utils.helpers import parse_labels, parse_weights
 from src.utils.image_processing import validate_image
 
 # ── Config ───────────────────────────────────────────────────────────────
@@ -51,7 +51,6 @@ def create_metadata(dataset_dir: Path) -> pd.DataFrame:
     print(f"\n{'='*60}")
     print("  Phase 1 — Dataset setup")
     print(f"{'='*60}\n")
-    print(f"  Dataset root : {dataset_dir}")
 
 
     food_info = []
@@ -73,25 +72,34 @@ def create_metadata(dataset_dir: Path) -> pd.DataFrame:
         for portion_dir in portion_dirs:
             image_files = [f for f in portion_dir.iterdir() if f.is_file()]
 
-            weight = parse_weight(portion_dir.name)
-            if weight is None:
-                skipped_folders.append(str(portion_dir))
+            labels = parse_labels(food_type_dir.name)
+            weights = parse_weights(portion_dir.name)
+
+            if not weights:
+                skipped_folders.append((str(portion_dir), "no weight pattern in folder name"))
                 continue
 
+            if len(labels) != len(weights):
+                skipped_folders.append((str(portion_dir), f"label/weight count mismatch ({len(labels)} labels, {len(weights)} weights)"))
+                continue
 
             if not image_files:
                 validation_issues.append({
                     "image": None,
                     "problem": f"No images found in: {portion_dir}"
-                    })
+                })
                 continue
-            
+
             for image_file in image_files:
                 food_info.append({
-                    "food_label": food_type_dir.name,
-                    "weight": weight,
-                    "images": image_file,
-                    "masks": np.nan  # placeholder for future columns (e.g. calories)  
+                    "food_label_1": labels[0],
+                    "weight_1":     weights[0],
+                    "food_label_2": labels[1] if len(labels) > 1 else np.nan,
+                    "weight_2":     weights[1] if len(weights) > 1 else np.nan,
+                    "food_label_3": labels[2] if len(labels) > 2 else np.nan,
+                    "weight_3":     weights[2] if len(weights) > 2 else np.nan,
+                    "images":       image_file,
+                    "masks":        np.nan,
                 })
 
     # ── Step 2: Validate all images ────────────────────────────────────────   
@@ -126,14 +134,14 @@ def create_metadata(dataset_dir: Path) -> pd.DataFrame:
     print(f"Metadata saved to: {csv_path}")
 
     if skipped_folders:
-        print(f"  Skipped {len(skipped_folders)} folders (no weight pattern in name):")
-        for f in skipped_folders:
-            print(f"    - {f}")
+        print(f"  Skipped {len(skipped_folders)} folders:")
+        for path, reason in skipped_folders:
+            print(f"    - {path}  ({reason})")
 
     # ── Step 4: Summary report ────────────────────────────────────────────────
 
-    num_food_labels = df["food_label"].nunique()
-    num_portions = df[["food_label", "weight"]].drop_duplicates().shape[0]
+    num_food_labels = df["food_label_1"].nunique()
+    num_portions = df[["food_label_1", "weight_1"]].drop_duplicates().shape[0]
     print(f"\n{'='*60}")
     print("  Summary")
     print(f"{'='*60}")

@@ -1,199 +1,129 @@
 # CLAUDE.md — Food Weight Estimation Project
 
-## Project overview
+## Project context
 
-This repo is the 1st phase of a bigger project that is a machine learning pipeline that estimates the **weight (in grams)** and predicts the **food label** of a dish from a single smartphone photo. It also computes a **nutritional breakdown** (kcal, protein, fat, carbohydrates) by combining the predicted weight with a per-100g nutritional database provided by a nutritionist.
+This is Phase 1 of a larger ML pipeline that estimates food weight and nutritional content from smartphone images. Phase 1 is concerned only with dataset preparation — no model training happens here. The goal is to produce a clean, validated `metadata.csv` that can be loaded directly by a PyTorch `Dataset` class in Phase 2.
 
-Here we only care about the proper dataset developement. Model developement is a future advancement but its good to have the goal in mind.
+---
 
-## What the final project does
+## Repo scope
 
-Given a photo of a plate with a credit card placed next to it as a size reference, the system:
+This repo does three things:
 
-1. Detects the credit card and computes a pixel-to-millimetre scale
-2. Segments the food item (isolates it from the plate and background)
-3. Classifies the food type (e.g. lasagne, burek, pasta bolognese)
-4. Estimates the weight in grams using the real-world area and food density
-5. Computes kcal, protein, fat, and carbohydrates from the predicted weight
-
-## Goals
-
-| Output | Description |
-|---|---|
-| Food label | The name/class of the food item (e.g. "lasagne", "burek") |
-| Weight in grams | Predicted weight of the portion on the plate |
-| Nutritional breakdown | kcal, protein, fat, carbs — derived from weight × per-100g values |
+1. Walks a raw image folder tree and parses food labels and weights from folder names
+2. Builds `annotations/metadata.csv` — one row per image
+3. Validates every image and flags issues in `annotations/validation_issues.csv`
 
 ---
 
 ## Dataset
 
-### Structure on disk
+### Input structure
 
-Original structure from pilots (what you received):
 ```
-data/raw/
-├── <food_type>/          # e.g. "lasagne", "burek"
-│   ├── 100g/             # folder name = weight in grams
-│   ├── 150g/
-│   └── 220g/
-│       ├── img_01.jpg    # at least 20 images per portion, no special naming
-│       └── ...
+<dataset_dir>/
+└── raw/
+    └── <food_label>/               # e.g. "lasagne"  or  "chicken, rice, currysauce"
+        └── <weight>/               # e.g. "150g"     or  "45g, 80g, 20g"
+            ├── img_01.jpg
+            └── ...
 ```
 
-Target structure:
+- The food label folder name is the label. Multiple dishes are comma-separated.
+- The portion folder name encodes the weight(s) in grams. Multiple weights are comma-separated, matching the order of the labels.
+- The number of labels and weights must match. Mismatched folders are skipped and logged.
+
+### Output structure
+
 ```
-data/
-├── raw/
-│   ├── <food_type>/
-│   │   ├── <food_type>_001/      # renamed to unique portion ID
-│   │   ├── <food_type>_002/
-│   │   └── ...
+<dataset_dir>/
 └── annotations/
-    ├── metadata.csv   
-    └── validation_issues.csv    # flagged images (if any)
-
+    ├── metadata.csv
+    └── validation_issues.csv
 ```
 
-### Metadata CSV schema (`metadata.csv`)
+### Metadata CSV schema
 
-Each row represents one **image** .
-
-```
-food_label, weight, images, masks
-pizza, 25, path/to/img, path/to/mask
-```
+One row per image, fixed 8 columns:
 
 | Column | Type | Description |
 |---|---|---|
-| `food_label` | string | Food class label |
-| `weight` | float | Ground truth weight measured on a digital kitchen scale |
-| `images` | string | Relative path for the image |
-| `masks` | string | Relative path for the mask |
-
-
-### Credit card as reference object
-
-The credit card (ISO/IEC 7810 ID-1 standard) has fixed real-world dimensions:
-- **85.6 mm × 54.0 mm**
-
-This allows computing a **pixel-per-millimetre (px/mm) ratio** from every image, which is used to convert segmentation mask areas from pixels into real-world units (mm² → cm²).
+| `food_label_1` | string | Primary food label |
+| `weight_1` | float | Weight in grams for label 1 |
+| `food_label_2` | string / NaN | Second food label (if present) |
+| `weight_2` | float / NaN | Weight in grams for label 2 |
+| `food_label_3` | string / NaN | Third food label (if present) |
+| `weight_3` | float / NaN | Weight in grams for label 3 |
+| `images` | string | Path to the image file |
+| `masks` | string / NaN | Path to the mask (placeholder, not yet used) |
 
 ---
 
-## ML pipeline
+## Scripts
 
-The pipeline has four sequential stages. The design principle is: **as simple as possible while remaining accurate**.
+### `scripts/metadata_builder.py`
 
-```
-Input image
-    │
-    ▼
-[Stage 1] Reference detection      → detect credit card → compute px/mm scale
-    │
-    ▼
-[Stage 2] Food segmentation        → produce a pixel mask of the food item
-    │
-    ▼
-[Stage 3] Food classification      → predict food label from the masked region
-    │
-    ▼
-[Stage 4] Weight & nutrition       → area (px) × scale → real area (cm²)
-                                      × assumed depth × density → grams
-                                      × nutrition per 100g → kcal, macros
+Main entry point. Run from project root:
+
+```bash
+python -m scripts.metadata_builder --dataset_dir /path/to/dataset
 ```
 
+`--dataset_dir` must point to the folder that contains `raw/`. Exits with an error if `raw/` is not found.
 
+What it does in order:
+1. Walks `raw/<food_label>/<weight>/` and collects all image files
+2. Calls `parse_labels` and `parse_weights` on each folder name
+3. Skips folders where no weight is found or label/weight counts don't match
+4. Validates each image via `validate_image`
+5. Writes `metadata.csv` and (if needed) `validation_issues.csv`
+6. Prints a summary report
+
+### `src/utils/helpers.py`
+
+| Function | Input | Output | Example |
+|---|---|---|---|
+| `parse_labels(folder_name)` | folder name string | `list[str]` | `"chicken, rice"` → `["chicken", "rice"]` |
+| `parse_weights(folder_name)` | folder name string | `list[float]` | `"45g, 80g"` → `[45.0, 80.0]` |
+| `parse_weight(folder_name)` | folder name string | `float / None` | `"150g"` → `150.0` — legacy, unused |
+
+### `src/utils/image_processing.py`
+
+| Function | What it checks |
+|---|---|
+| `validate_image(path)` | Readable, minimum size (300px), not blurry (Laplacian variance < 80) |
+
+---
+
+## Phase 1 tasks
+
+### Task 1 — Metadata builder
+Build `metadata.csv` from the raw folder tree. Complete when:
+- [ ] All images have `food_label_1` and `weight_1` populated
+- [ ] Multi-label rows populate `food_label_2`/`weight_2` and `food_label_3`/`weight_3` correctly
+- [ ] No missing values in required columns
+
+### Task 2 — Image QC
+Validate all images. Complete when:
+- [ ] Every image has been checked for readability, resolution, and blur
+- [ ] `validation_issues.csv` is produced for any flagged images
+
+---
+
+## Important constraints
+
+- **Do not commit raw images to git.**
+- **`raw/` must always exist.** The script does not create it — missing `raw/` exits with an error.
+- **Portion folder names must encode the weight.** The regex `(\d+(?:\.\d+)?)\s*g` (case-insensitive) is used to extract weights. Folders that don't match are skipped.
+- **Label and weight counts must match.** A folder named `"chicken, rice"` with a portion named `"45g, 80g, 20g"` (2 labels, 3 weights) is skipped and logged.
+- **Maximum 3 labels per image.** The schema is fixed-width at 3 label/weight pairs.
+
+---
 
 ## Tech stack
 
 | Component | Tool |
 |---|---|
 | Language | Python 3.10+ |
-| Data handling | pandas, Pillow, numpy |
-| Notebooks | Jupyter |
-
----
-
-## Development plan
-
-The project is built in five sequential phases. This repository represents Phase 1
-
-| Phase | Name | Status | Goal |
-|---|---|---|---|
-| 1 | Data foundation | 🔄 Current | Clean dataset, metadata CSV, QC, train/val/test split |
-| 2 | Classification baseline | ⏳ Pending | Train a CNN to predict food label from top-down image |
-| 3 | Segmentation + reference detection | ⏳ Pending | Food masks + px/mm scale from credit card |
-| 4 | Weight estimation | ⏳ Pending | Area × depth × density → grams |
-| 5 | Nutrition output + evaluation | ⏳ Pending | Full pipeline, metrics, portfolio write-up |
-
----
-
-## Phase 1 — Data foundation
-
-### Goal
-Produce a clean, well-organised dataset that is ready to be loaded by a PyTorch `Dataset` class in Phase 2. No model training happens in this phase.
-
-### Tasks
-
-**Task 1 — Folder structure**
-
-Task 1 targets to create/construct the csv file that will contain the metadata. The endgoal of this task is to have a .py file that will take the input dataset and will either produce or update (if it already exists) the csv that contains the information for each food type and portion that will later be used in model training and the data loaders that we will create.
-
-```
-data/
-├── raw/
-│   ├── <food_type>/              # e.g. "lasagne", "burek"
-│   │   ├── <portion_id>/         # e.g. "lasagne_001"
-│   │   │   ├── img1.jpg      
-│   │   │   ├── img2.jpg        
-│   │   │   ├── ...
-│   │   │   ├── ...       
-│   │   │   └── ...
-│   │   └── ...
-│   └── ...
-└── annotations/
-    └── metadata.csv
-
-```
-
-
-Final schema (one row per portion):
-```
-food_label, weight, images, masks
-pizza, 25, path/to/image, path/to/mask 
-```
-
-**Task 2 — Image quality check (QC)**
-
-Creates a csv file with img problems
-
-| Check | Method | Flag if |
-|---|---|---|
-| Resolution | PIL image size | width or height < 500px |
-| Blurriness | OpenCV Laplacian variance | variance < 100 |
-
-
-### Phase 1 complete when
-- [ ] `metadata.csv` is complete — no missing `weight` valuesed
-- [ ] `metadata.csv` has all 4 columns
-
-
----
-
-## Important constraints and notes
-
-- **Do not commit raw images to git.** Use `.gitignore` and document the data download/access procedure in README.md.
-
----
-
-## Glossary
-
-| Term | Meaning |
-|---|---|
-| Portion | A single plate of food with a known weight, photographed at least 20 times |
-| Food type | The class label (e.g. "pizza", "lasagne") |
-| px/mm ratio | Pixels per millimetre — derived from the credit card reference |
-| Mask | A binary image indicating which pixels belong to the food item |
-| Density | Mass per unit volume (g/cm³) — used to convert area × depth → weight |
-| Ground truth | The actual weight measured on a digital kitchen scale |
+| Data handling | pandas, numpy |
+| Image handling | Pillow, opencv-python |

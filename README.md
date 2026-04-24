@@ -1,134 +1,129 @@
-# Food Weight Estimation
+# Food Weight Estimation — Phase 1: Data Foundation
 
-A machine learning pipeline that estimates the weight in grams of a food portion from a single          
-smartphone photo and computes a nutritional breakdown (kcal, protein, fat, carbohydrates).              
+This repository is Phase 1 of a larger ML pipeline for image-based food weight and nutrition estimation. The scope here is limited to building a clean, validated dataset ready for model training.
 
-The system uses a credit card placed next to the plate as a fixed-size reference object (85.6 × 54 mm)  
-to derive a pixel-to-millimetre scale, segments the food item, classifies the food type, and estimates
-weight from the real-world area combined with food density values.                                      
-                
-This repository covers Phase 1 — Data Foundation: building a clean, validated dataset ready for model   
-training.
+> This is part of the **Vippstar** clinical research initiative (EU-funded), supporting dietary assessment for visually impaired children.
 
 ---
 
-## What the final AI pipeline does
+## What this repo does
 
-Given a photo of a plate with a credit card placed next to it as a size reference, the system:
+Given raw pilot images organised in a specific folder structure, it:
 
-1. Detects the credit card and computes a pixel-to-millimetre scale
-2. Segments the food item (isolates it from the plate and background)
-3. Classifies the food type (e.g. lasagne, burek, pasta bolognese)
-4. Estimates the weight in grams using the real-world area and food density
-5. Computes kcal, protein, fat, and carbohydrates from the predicted weight
-
----
-
-## What this Repo does
+1. Walks the folder tree and extracts food labels and weights from folder names
+2. Builds `annotations/metadata.csv` — one row per image
+3. Validates every image (readability, minimum resolution, blurriness)
+4. Writes `annotations/validation_issues.csv` for any flagged images
+5. Prints a summary report
 
 ---
 
-Data Foundation: building a clean, validated dataset ready for model   
-training. (Given a specific Structure)
+## Input structure
 
-Files derived from pilots of the study must be in the following structure:
+Images must be placed under a `raw/` folder following this layout:
 
-raw/
-├── <food_label>/         # e.g. "lasagne", "burek"
-│   ├── 100g/             # folder name = weight in grams
-│   ├── 150g/
-│   └── 220g/
-│       ├── img_01.jpg    # at least 20 images per portion, no special naming
-│       └── ...
+**Single-label portion** (one dish per image):
+```
+<dataset_dir>/
+└── raw/
+    └── lasagne/
+        └── 150g/
+            ├── img_01.jpg
+            └── ...
+```
+
+**Multi-label portion** (multiple dishes per image, up to 3):
+```
+<dataset_dir>/
+└── raw/
+    └── chicken, rice, currysauce/
+        └── 45g, 80g, 20g/
+            ├── img_01.jpg
+            └── ...
+```
+
+Rules:
+- The food label folder name is the label (comma-separated for multiple dishes)
+- The portion folder name must contain the weight in grams (e.g. `150g`, `45g, 80g, 20g`)
+- The number of labels and weights must match — mismatched folders are skipped
+- `--dataset_dir` must point to the folder that **contains** `raw/`, not to `raw/` itself
 
 ---
 
+## Output
 
-## Project status
+`annotations/metadata.csv` — one row per image:
 
-| Phase | Description | Status |
+| Column | Type | Description |
 |---|---|---|
-| 1 | Data foundation — organize dataset, QC, train/val/test split | 🔄 In progress |
-| 2 | Classification baseline — predict food label from image | ⏳ Pending |
-| 3 | Segmentation + credit card detection | ⏳ Pending |
-| 4 | Weight estimation — area × depth × density → grams | ⏳ Pending |
-| 5 | Nutrition output + evaluation + write-up | ⏳ Pending |
-
----
-
-## Dataset
-
-Images were collected by study pilots following a controlled capture protocol. The dataset covers dishes from **Italian**, **Bosnian**, **Greek** and **Belgian** cuisines.
-
-Each food type has multiple portions photographed at varied weights. Each portion has at least 20 images: 10 from different positions and 10 from different tilt angles (20°–30°). A credit card is placed in every shot as a fixed-size reference object (85.6 × 54 mm).
-
-> Raw images are not included in this repository. See `CLAUDE.md` for the full data specification and folder structure.
+| `food_label_1` | string | Primary food label |
+| `weight_1` | float | Weight in grams for label 1 |
+| `food_label_2` | string / NaN | Second food label (if present) |
+| `weight_2` | float / NaN | Weight in grams for label 2 |
+| `food_label_3` | string / NaN | Third food label (if present) |
+| `weight_3` | float / NaN | Weight in grams for label 3 |
+| `images` | string | Path to the image file |
+| `masks` | string / NaN | Path to the mask (placeholder, not yet used) |
 
 ---
 
 ## Repo structure
 
 ```
-food-weight-estimation/
-├── CLAUDE.md                        # full project spec (read this first)
-├── README.md                        # this file
-├── .gitignore
+Vippstar/
+├── CLAUDE.md
+├── README.md
+├── requirements.txt
 ├── data/
-│   ├── raw/                         # images — not committed to git
+│   ├── raw/                          # images — not committed to git
 │   └── annotations/
-│       ├── metadata.csv             # portion_id, food_type, weight_g, split
-│       └── validation_issues.csv    # QC failures (auto-generated)
+│       ├── metadata.csv              # auto-generated
+│       └── validation_issues.csv     # auto-generated, only if issues found
 ├── src/
-│   ├── helpers/
-│   └── image_processing/
-├── scripts/
-│   └── metadata_builder.py              # Phase 1 setup script
-└── requirements.txt
+│   └── utils/
+│       ├── helpers.py                # parse_labels, parse_weights
+│       └── image_processing.py       # validate_image
+└── scripts/
+    └── metadata_builder.py           # main script
 ```
 
 ---
 
 ## Setup
 
-**Requirements:** Python 3.10+, pip
+**Requirements:** Python 3.10+
 
 ```bash
-# Clone the repo
 git clone https://github.com/tsiokris/Vippstar.git
 cd Vippstar
 
-# Create a virtual environment
 python -m venv venv
 source venv/bin/activate        # on Windows: venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
 ---
 
-## Phase 1 — Running the setup script
-
-Place your raw images in `dataset/raw/<food_type>/<weight_folder>/` then run:
+## Running the script
 
 ```bash
-python scripts/metadata_builder.py --dataset_dir data/
+python -m scripts.metadata_builder --dataset_dir /path/to/your/dataset
 ```
 
-This will rename portion folders to unique IDs, parse weights from folder names, assign train/val/test splits, write `metadata.csv`, and validate all images.
+Must be run from the project root. `--dataset_dir` points to the parent of `raw/`.
 
 ---
 
-## Tech stack
+## Project status
 
-- **Python 3.10+**
-- Data: pandas, Pillow, NumPy
-
----
-
-## Context
-
-This project is part of the **Vippstar** clinical research initiative (EU-funded). The goal is to support dietary assessment in clinical settings for visually impared children by providing automated, image-based food weight and nutrition estimation.
+| Phase | Description | Status |
+|---|---|---|
+| 1 | Data foundation — metadata CSV, image QC | 🔄 In progress |
+| 2 | Classification baseline — predict food label from image | ⏳ Pending |
+| 3 | Segmentation + credit card detection | ⏳ Pending |
+| 4 | Weight estimation — area × depth × density → grams | ⏳ Pending |
+| 5 | Nutrition output + evaluation | ⏳ Pending |
 
 ---
 
