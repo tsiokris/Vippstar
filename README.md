@@ -14,7 +14,8 @@ Given raw pilot images organised in a specific folder structure, it:
 2. Builds `annotations/metadata.csv` — one row per image
 3. Validates every image (readability, minimum resolution, blurriness)
 4. Writes `annotations/validation_issues.csv` for any flagged images
-5. Prints a summary report
+5. Splits the dataset into a holdout set + 5-fold CV, writing `annotations/splits.csv`
+6. Prints a summary report
 
 ---
 
@@ -52,7 +53,7 @@ Rules:
 
 ## Output
 
-`annotations/metadata.csv` — one row per image:
+### `annotations/metadata.csv` — one row per image
 
 | Column | Type | Description |
 |---|---|---|
@@ -64,6 +65,53 @@ Rules:
 | `weight_3` | float / NaN | Weight in grams for label 3 |
 | `images` | string | Path to the image file |
 | `masks` | string / NaN | Path to the mask (placeholder, not yet used) |
+
+### `annotations/splits.csv` — one row per image
+
+| Column | Type | Description |
+|---|---|---|
+| `image_path` | string | Path to the image file (joins with `metadata.csv` on `images`) |
+| `split` | string | `holdout`, `fold_1`, `fold_2`, `fold_3`, `fold_4`, or `fold_5` |
+
+---
+
+## Dataset split design
+
+### Label definition — plates, not ingredients
+
+A label is the full **plate combination**, not an individual ingredient. `chicken` and `chicken + rice + currysauce` are two different plates. This matters for counting unique classes (42 plates) and for stratifying the split correctly — grouping by `food_label_1` alone would undercount classes and bias the split.
+
+### Splitting at the portion level to avoid data leakage
+
+Each plate has ~10 portions (different weights, e.g. 100g, 150g, 200g …) and each portion has ~20 images photographed in the same session. Images within a portion are near-duplicates: same food, same weight, same background and lighting conditions. Splitting at the **image level** would allow near-duplicate images from the same session to appear in both train and test — a direct data leak.
+
+The split is therefore performed at the **portion level**: all ~20 images of a portion travel together into the same split. No portion ever spans two splits.
+
+### Split structure
+
+- **30% holdout** — 3 portions per plate assigned randomly (seeded). Held out entirely from model selection and hyperparameter tuning; used only for final evaluation.
+- **70% 5-fold CV** — the remaining 7 portions per plate are distributed across 5 folds using `StratifiedKFold` (stratified by plate combination). Each fold serves as the validation set once; the other four are training.
+
+| Split | Portions | Images | % |
+|---|---|---|---|
+| holdout | 126 | ~2,598 | 30% |
+| fold_1–5 | ~59 each | ~1,200 each | ~14% each |
+
+### How to use splits in Phase 2
+
+```python
+import pandas as pd
+
+meta = pd.read_csv("data/annotations/metadata.csv")
+splits = pd.read_csv("data/annotations/splits.csv")
+df = meta.merge(splits, left_on="images", right_on="image_path")
+
+holdout = df[df["split"] == "holdout"]
+
+# Train on folds 2-5, validate on fold 1
+train = df[df["split"].isin(["fold_2", "fold_3", "fold_4", "fold_5"])]
+val   = df[df["split"] == "fold_1"]
+```
 
 ---
 
@@ -78,13 +126,15 @@ Vippstar/
 │   ├── raw/                          # images — not committed to git
 │   └── annotations/
 │       ├── metadata.csv              # auto-generated
-│       └── validation_issues.csv     # auto-generated, only if issues found
+│       ├── validation_issues.csv     # auto-generated, only if issues found
+│       └── splits.csv                # auto-generated
 ├── src/
 │   └── utils/
 │       ├── helpers.py                # parse_labels, parse_weights
 │       └── image_processing.py       # validate_image
 └── scripts/
-    └── metadata_builder.py           # main script
+    ├── metadata_builder.py           # builds metadata.csv and validation_issues.csv
+    └── split_dataset.py              # builds splits.csv
 ```
 
 ---

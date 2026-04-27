@@ -8,11 +8,12 @@ This is Phase 1 of a larger ML pipeline that estimates food weight and nutrition
 
 ## Repo scope
 
-This repo does three things:
+This repo does four things:
 
 1. Walks a raw image folder tree and parses food labels and weights from folder names
 2. Builds `annotations/metadata.csv` — one row per image
 3. Validates every image and flags issues in `annotations/validation_issues.csv`
+4. Splits the dataset into a holdout set + 5-fold CV at the portion level, writing `annotations/splits.csv`
 
 ---
 
@@ -39,7 +40,8 @@ This repo does three things:
 <dataset_dir>/
 └── annotations/
     ├── metadata.csv
-    └── validation_issues.csv
+    ├── validation_issues.csv
+    └── splits.csv
 ```
 
 ### Metadata CSV schema
@@ -79,6 +81,28 @@ What it does in order:
 5. Writes `metadata.csv` and (if needed) `validation_issues.csv`
 6. Prints a summary report
 
+### `scripts/split_dataset.py`
+
+Splits the dataset into a holdout set and 5-fold CV. Run from project root:
+
+```bash
+python -m scripts.split_dataset --dataset_dir data
+```
+
+`--dataset_dir` must point to the folder that contains `annotations/metadata.csv`. Accepts an optional `--seed` (default: 42).
+
+What it does in order:
+1. Loads `metadata.csv` and derives a **plate label** per row (all food labels joined with ` + `)
+2. Derives a **portion key** per row (plate label + weight folder name)
+3. For each plate, randomly assigns 3 of its 10 portions to `holdout` (30%)
+4. Distributes the remaining 7 portions across 5 folds using `StratifiedKFold` (stratified by plate)
+5. Writes `splits.csv` with columns `image_path` and `split`
+
+**Key design decisions:**
+- **Plate-level labels:** `chicken` and `chicken + rice` are distinct classes. Counting by `food_label_1` alone undercounts unique classes and biases the split.
+- **Portion-level split:** All ~20 images of a portion stay together. Image-level splitting leaks near-duplicate images (same food, weight, session) across train and test.
+- **Stratified by plate:** Each of the 42 plate combinations contributes proportionally to every split.
+
 ### `src/utils/helpers.py`
 
 | Function | Input | Output | Example |
@@ -99,14 +123,21 @@ What it does in order:
 
 ### Task 1 — Metadata builder
 Build `metadata.csv` from the raw folder tree. Complete when:
-- [ ] All images have `food_label_1` and `weight_1` populated
-- [ ] Multi-label rows populate `food_label_2`/`weight_2` and `food_label_3`/`weight_3` correctly
-- [ ] No missing values in required columns
+- [x] All images have `food_label_1` and `weight_1` populated
+- [x] Multi-label rows populate `food_label_2`/`weight_2` and `food_label_3`/`weight_3` correctly
+- [x] No missing values in required columns
 
 ### Task 2 — Image QC
 Validate all images. Complete when:
-- [ ] Every image has been checked for readability, resolution, and blur
-- [ ] `validation_issues.csv` is produced for any flagged images
+- [x] Every image has been checked for readability, resolution, and blur
+- [x] `validation_issues.csv` is produced for any flagged images
+
+### Task 3 — Dataset split
+Split the dataset for model training. Complete when:
+- [x] Holdout set contains exactly 30% of portions (3 per plate), never seen during training
+- [x] Remaining 70% is assigned to 5 folds, stratified by plate combination
+- [x] Split is at the portion level — no portion spans two splits
+- [x] `splits.csv` is written with `image_path` and `split` columns
 
 ---
 
