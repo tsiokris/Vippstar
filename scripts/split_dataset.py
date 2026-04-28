@@ -50,7 +50,11 @@ def main():
         default=Path("data"),
         help="Path to the dataset root (must contain annotations/metadata.csv).",
     )
-    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument(
+        "--seed", 
+        type=int, 
+        default=DEFAULT_SEED
+    )
     args = parser.parse_args()
 
     annot_dir = args.dataset_dir / "annotations"
