@@ -1,10 +1,28 @@
 """
+Image-level dataset splitter                                                                                   
+                                                                                 
+Splits the dataset at the individual image level, ensuring every weight
+and food-label combination (portion_key) is represented in every split.                                        
+                                                                                                                
+Produces four splits:                                                                                          
+- holdout_val   : 15% of images, reserved for validation during development                                  
+- holdout_test  : 15% of images, reserved for final evaluation only                                          
+- fold_0–fold_4 : 70% of images split into 5 folds for cross-validation                                      
+                                                                                                                
+Stratification is done by portion_key (plate label + weight folder), so                                        
+each weight point appears proportionally in every split.                                                       
 
+                                                                                                       
+HOW TO RUN                                                                                                     
+----------                                                                                                     
+From the project root:                                                                                         
+python split_by_image.py --dataset_dir data
+                                                                                                                
+Output          
+------
+<dataset_dir>/annotations/splits_image_level.csv
+Columns: images, split
 
-HOW TO RUN
-----------
-From the project root:
-  python -m scripts.split_by_image --dataset_dir data
 """
 
 import pandas as pd
@@ -16,7 +34,7 @@ from sklearn.model_selection import train_test_split, StratifiedKFold
 # ----------------- CONFIG -----------------
 DEFAULT_SEED = 42
 N_FOLDS = 5
-HOLDOUT_PORTIONS = 0.3
+HOLDOUT_FRACTION = 0.3
 
 
 def plate_label(row: pd.Series) -> str:
@@ -61,7 +79,7 @@ def main():
     # ----------------- Step 2: Split train and holdout -----------------
     train_df, holdout_df = train_test_split(
         df,
-        test_size=HOLDOUT_PORTIONS,
+        test_size=HOLDOUT_FRACTION,
         random_state=args.seed,
         stratify=df["portion_key"]
     )
@@ -87,8 +105,8 @@ def main():
     # ----------------- Step 5: Combine and save final split -----------------
     final_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
     final_df = final_df[["images", "split"]]
-    final_df.to_csv(annot_dir / "final_split.csv", index=False)
-    print(f"Final split saved to: {annot_dir / 'final_split.csv'}")
+    final_df.to_csv(annot_dir / "splits_image_level.csv", index=False)
+    print(f"Final split saved to: {annot_dir / 'splits_image_level.csv'}")
 
 
 if __name__ == "__main__":
