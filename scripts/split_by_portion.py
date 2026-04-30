@@ -1,10 +1,28 @@
 """
+Portion-level dataset splitter
 
+Splits the dataset at the portion level — all images from the same portion
+folder (same food, weight, and session) are kept together in a single split.
+This prevents near-duplicate images from leaking across train and test sets.
+
+Produces four splits:
+- holdout_val  : 15% of portions, reserved for validation during development
+- holdout_test : 15% of portions, reserved for final evaluation only
+- fold_0–fold_4: 70% of portions split into 5 folds for cross-validation
+
+The split unit is the portion (a folder of ~20 images). Stratification is
+done by plate label (full food combination), so each plate type appears
+proportionally in every split.
 
 HOW TO RUN
 ----------
 From the project root:
   python -m scripts.split_by_portion --dataset_dir data
+
+Output
+------
+<dataset_dir>/annotations/splits_portion_level.csv
+Columns: images, split
 """
 
 import pandas as pd
@@ -77,16 +95,23 @@ def main():
         stratify=holdout_df["plate"]
     )
 
-    # val_df = val_df.assign(split="holdout_val")
-    # test_df = test_df.assign(split="holdout_test")
+    val_df = val_df.assign(split="holdout_val")
+    test_df = test_df.assign(split="holdout_test")
     train_df["split"] = None    # Placeholder
 
     # ----------------- Step 5: Create 5-fold split on the train set -----------------
     skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=args.seed)
-    
+    for fold, (_, val_idx) in enumerate(skf.split(train_df, train_df["plate"])):
+        train_df.iloc[val_idx, train_df.columns.get_loc("split")] = f"fold_{fold}"
 
-    # ----------------- Step 6: Combine and save final split -----------------
+    # ----------------- Step 6: Combine and map the splits ---------------------------------
+    final_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
+    mapping = final_df.set_index("portion_key")["split"].to_dict()
+    df["split"] = df["portion_key"].map(mapping)
 
+    # ----------------- Step 7: Save the final split -----------------------------
+    df[["images", "split"]].to_csv(annot_dir / "splits_portion_level.csv", index=False)
+    print(f"Final split saved to: {annot_dir / 'splits_portion_level.csv'}")
 
 
 if __name__ == "__main__":

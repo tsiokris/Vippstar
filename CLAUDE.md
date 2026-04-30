@@ -13,7 +13,7 @@ This repo does four things:
 1. Walks a raw image folder tree and parses food labels and weights from folder names
 2. Builds `annotations/metadata.csv` — one row per image
 3. Validates every image and flags issues in `annotations/validation_issues.csv`
-4. Splits the dataset into a holdout set + 5-fold CV at the portion level, writing `annotations/splits.csv`
+4. Splits the dataset into a holdout set + 5-fold CV, writing `annotations/splits_portion_level.csv` and `annotations/splits_image_level.csv`
 
 ---
 
@@ -41,7 +41,8 @@ This repo does four things:
 └── annotations/
     ├── metadata.csv
     ├── validation_issues.csv
-    └── splits.csv
+    ├── splits_portion_level.csv
+    └── splits_image_level.csv
 ```
 
 ### Metadata CSV schema
@@ -81,27 +82,44 @@ What it does in order:
 5. Writes `metadata.csv` and (if needed) `validation_issues.csv`
 6. Prints a summary report
 
-### `scripts/split_dataset.py`
+### `scripts/split_by_portion.py`
 
-Splits the dataset into a holdout set and 5-fold CV. Run from project root:
+Splits the dataset at the **portion level** — all images from a portion folder travel together into the same split. Run from project root:
 
 ```bash
-python -m scripts.split_dataset --dataset_dir data
+python -m scripts.split_by_portion --dataset_dir data
 ```
 
 `--dataset_dir` must point to the folder that contains `annotations/metadata.csv`. Accepts an optional `--seed` (default: 42).
 
 What it does in order:
-1. Loads `metadata.csv` and derives a **plate label** per row (all food labels joined with ` + `)
-2. Derives a **portion key** per row (plate label + weight folder name)
-3. For each plate, randomly assigns 3 of its 10 portions to `holdout` (30%)
-4. Distributes the remaining 7 portions across 5 folds using `StratifiedKFold` (stratified by plate)
-5. Writes `splits.csv` with columns `image_path` and `split`
+1. Loads `metadata.csv` and derives a **plate label** and **portion key** per row
+2. Deduplicates to one row per portion
+3. Splits portions into train (70%) and holdout (30%), stratified by plate
+4. Splits holdout 50/50 into `holdout_val` and `holdout_test`, stratified by plate
+5. Assigns `fold_0`–`fold_4` to train portions using `StratifiedKFold` (stratified by plate)
+6. Maps portion assignments back to all image rows
+7. Writes `splits_portion_level.csv` with columns `images` and `split`
+
+### `scripts/split_by_image.py`
+
+Splits the dataset at the **image level** — each image is assigned independently. Use this as an alternative to compare model performance against the portion-level split. Run from project root:
+
+```bash
+python -m scripts.split_by_image --dataset_dir data
+```
+
+What it does in order:
+1. Loads `metadata.csv` and derives a **plate label** and **portion key** per row
+2. Splits images into train (70%) and holdout (30%), stratified by portion key
+3. Splits holdout 50/50 into `holdout_val` and `holdout_test`, stratified by portion key
+4. Assigns `fold_0`–`fold_4` to train images using `StratifiedKFold` (stratified by portion key)
+5. Writes `splits_image_level.csv` with columns `images` and `split`
 
 **Key design decisions:**
 - **Plate-level labels:** `chicken` and `chicken + rice` are distinct classes. Counting by `food_label_1` alone undercounts unique classes and biases the split.
-- **Portion-level split:** All ~20 images of a portion stay together. Image-level splitting leaks near-duplicate images (same food, weight, session) across train and test.
-- **Stratified by plate:** Each of the 42 plate combinations contributes proportionally to every split.
+- **Portion-level split (preferred):** All ~20 images of a portion stay together. Image-level splitting leaks near-duplicate images (same food, weight, session) across train and test.
+- **Two splitters:** Both are kept to allow direct performance comparison between split strategies.
 
 ### `src/utils/helpers.py`
 
@@ -134,10 +152,10 @@ Validate all images. Complete when:
 
 ### Task 3 — Dataset split
 Split the dataset for model training. Complete when:
-- [x] Holdout set contains exactly 30% of portions (3 per plate), never seen during training
+- [x] Holdout set contains 30% of portions, split into `holdout_val` and `holdout_test`
 - [x] Remaining 70% is assigned to 5 folds, stratified by plate combination
-- [x] Split is at the portion level — no portion spans two splits
-- [x] `splits.csv` is written with `image_path` and `split` columns
+- [x] Portion-level split: no portion spans two splits → `splits_portion_level.csv`
+- [x] Image-level split available for comparison → `splits_image_level.csv`
 
 ---
 

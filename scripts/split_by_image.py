@@ -16,7 +16,7 @@ each weight point appears proportionally in every split.
 HOW TO RUN                                                                                                     
 ----------                                                                                                     
 From the project root:                                                                                         
-python split_by_image.py --dataset_dir data
+python -m scripts.split_by_image --dataset_dir data
                                                                                                                 
 Output          
 ------

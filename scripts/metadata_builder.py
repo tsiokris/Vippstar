@@ -1,6 +1,6 @@
 """
-Phase 1 — Metadata builder script
-================================
+Metadata builder script
+
 What this script does, in order:
   1. Walks your existing folder structure (food_type / Xg / images)
   2. Parses the weight in grams from the original folder name
@@ -13,9 +13,11 @@ HOW TO RUN
 from the project root, run:
   python  -m scripts.metadata_builder.py --dataset_dir /path/to/your/dataset
 
-REQUIREMENTS
-------------
-  pip install pillow opencv-python pandas scikit-learn
+OUTPUT
+----------
+dataset/annotations/metadata.csv
+Columns: food_label_1, weight_1, food_label_2, weight_2, food_label_3, weight_3, images, masks
+
 """
 
 
