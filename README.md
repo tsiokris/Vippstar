@@ -16,7 +16,7 @@ Given raw pilot images organised in a specific folder structure, it:
 4. Writes `annotations/validation_issues.csv` for any flagged images
 5. Splits the dataset into a holdout set + 5-fold CV at the portion level, writing `annotations/splits_portion_level.csv`
 6. Optionally splits at the image level for comparison, writing `annotations/splits_image_level.csv`
-6. Prints a summary report
+7. Prints a summary report
 
 ---
 
@@ -186,7 +186,7 @@ Must be run from the project root. `--dataset_dir` points to the parent of `raw/
 
 | Phase | Description | Status |
 |---|---|---|
-| 1 | Data foundation — metadata CSV, image QC | 🔄 In progress |
+| 1 | Data foundation — metadata CSV, image QC | ✅ Complete |
 | 2 | Classification baseline — predict food label from image | ⏳ Pending |
 | 3 | Segmentation + credit card detection | ⏳ Pending |
 | 4 | Weight estimation — area × depth × density → grams | ⏳ Pending |

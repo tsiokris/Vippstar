@@ -208,5 +208,5 @@ __marimo__/
 
 # My project-specific ignores
 datasets/
-data/
+data/raw/
 CLAUDE_CODE_GUIDE.md
