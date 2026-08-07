@@ -8,12 +8,15 @@ This is Phase 1 of a larger ML pipeline that estimates food weight and nutrition
 
 ## Repo scope
 
-This repo does four things:
+**Rework in progress:** weight estimation has been dropped from the project agreement — classification is now the priority. Weight data is still captured where present since weight estimation may return later. Dataset splitting has been removed for now pending a redesign (the old splitter was too generic); `split_by_portion.py` and `split_by_image.py` no longer exist.
+
+This repo currently does three things:
 
 1. Walks a raw image folder tree and parses food labels and weights from folder names
-2. Builds `annotations/metadata.csv` — one row per image
-3. Validates every image and flags issues in `annotations/validation_issues.csv`
-4. Splits the dataset into a holdout set + 5-fold CV, writing `annotations/splits_portion_level.csv` and `annotations/splits_image_level.csv`
+2. Builds `annotations/metadata.csv` — one row per image, labels kept verbatim from folder names
+3. Validates every image and excludes failed images from `metadata.csv`, flagging them in `annotations/validation_issues.csv`
+
+A second script producing a classification-ready CSV (normalized single combined label, weights dropped) is in progress and not yet in the repo.
 
 ---
 
@@ -40,9 +43,7 @@ This repo does four things:
 <dataset_dir>/
 └── annotations/
     ├── metadata.csv
-    ├── validation_issues.csv
-    ├── splits_portion_level.csv
-    └── splits_image_level.csv
+    └── validation_issues.csv       # only written if issues are found
 ```
 
 ### Metadata CSV schema
@@ -75,51 +76,15 @@ python -m scripts.metadata_builder --dataset_dir /path/to/dataset
 `--dataset_dir` must point to the folder that contains `raw/`. Exits with an error if `raw/` is not found.
 
 What it does in order:
-1. Walks `raw/<food_label>/<weight>/` and collects all image files
+1. Walks `raw/<food_label>/<weight>/` and collects image files (filtered by extension: `.jpg`, `.jpeg`, `.png`)
 2. Calls `parse_labels` and `parse_weights` on each folder name
-3. Skips folders where no weight is found or label/weight counts don't match
-4. Validates each image via `validate_image`
-5. Writes `metadata.csv` and (if needed) `validation_issues.csv`
-6. Prints a summary report
+3. Skips folders where no weight is found, label/weight counts don't match, or no image files are present
+4. Validates each image via `validate_image`; only images that **pass** validation become rows in `metadata.csv` — failed images are excluded and logged in `validation_issues.csv` instead (both files use the `images` column, so they join directly)
+5. Prints a summary report (plate count, portion count, image count)
 
-### `scripts/split_by_portion.py`
+`images` paths are written as resolved absolute paths, so `metadata.csv` stays valid regardless of the working directory it's later read from.
 
-Splits the dataset at the **portion level** — all images from a portion folder travel together into the same split. Run from project root:
-
-```bash
-python -m scripts.split_by_portion --dataset_dir data
-```
-
-`--dataset_dir` must point to the folder that contains `annotations/metadata.csv`. Accepts an optional `--seed` (default: 42).
-
-What it does in order:
-1. Loads `metadata.csv` and derives a **plate label** and **portion key** per row
-2. Deduplicates to one row per portion
-3. Splits portions into train (70%) and holdout (30%), stratified by plate
-4. Splits holdout 50/50 into `holdout_val` and `holdout_test`, stratified by plate
-5. Assigns `fold_0`–`fold_4` to train portions using `StratifiedKFold` (stratified by plate)
-6. Maps portion assignments back to all image rows
-7. Writes `splits_portion_level.csv` with columns `images` and `split`
-
-### `scripts/split_by_image.py`
-
-Splits the dataset at the **image level** — each image is assigned independently. Use this as an alternative to compare model performance against the portion-level split. Run from project root:
-
-```bash
-python -m scripts.split_by_image --dataset_dir data
-```
-
-What it does in order:
-1. Loads `metadata.csv` and derives a **plate label** and **portion key** per row
-2. Splits images into train (70%) and holdout (30%), stratified by portion key
-3. Splits holdout 50/50 into `holdout_val` and `holdout_test`, stratified by portion key
-4. Assigns `fold_0`–`fold_4` to train images using `StratifiedKFold` (stratified by portion key)
-5. Writes `splits_image_level.csv` with columns `images` and `split`
-
-**Key design decisions:**
-- **Plate-level labels:** `chicken` and `chicken + rice` are distinct classes. Counting by `food_label_1` alone undercounts unique classes and biases the split.
-- **Portion-level split (preferred):** All ~20 images of a portion stay together. Image-level splitting leaks near-duplicate images (same food, weight, session) across train and test.
-- **Two splitters:** Both are kept to allow direct performance comparison between split strategies.
+**Dataset splitting has been removed for now.** `split_by_portion.py` and `split_by_image.py` were deleted — the old design was too generic and its output was stale relative to the current raw data. Splitting will be redesigned once the classification CSV builder is in place.
 
 ### `src/utils/helpers.py`
 
@@ -151,11 +116,10 @@ Validate all images. Complete when:
 - [x] `validation_issues.csv` is produced for any flagged images
 
 ### Task 3 — Dataset split
-Split the dataset for model training. Complete when:
-- [x] Holdout set contains 30% of portions, split into `holdout_val` and `holdout_test`
-- [x] Remaining 70% is assigned to 5 folds, stratified by plate combination
-- [x] Portion-level split: no portion spans two splits → `splits_portion_level.csv`
-- [x] Image-level split available for comparison → `splits_image_level.csv`
+**Removed for now.** The previous portion/image-level splitters were too generic and have been deleted along with their stale output CSVs. Splitting will be redesigned from scratch once the classification CSV builder (Task 4) is done.
+
+### Task 4 — Classification-ready CSV
+Build a second CSV from `metadata.csv` for the classification task: combine `food_label_1/2/3` into a single normalized label per image (lowercase, typo-corrected, joined with `_`, original folder order preserved) and drop the weight columns. Weight is kept in `metadata.csv` itself in case weight estimation resumes later. In progress.
 
 ---
 
