@@ -5,7 +5,7 @@ from pathlib import Path
 
 # ── Config ──────────────────────────────────────────────────────────────
 
-BLUR_THRESHOLD = 80
+BLUR_THRESHOLD = 30
 MIN_IMAGE_SIZE = 300
 
 
